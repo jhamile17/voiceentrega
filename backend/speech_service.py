@@ -1,4 +1,5 @@
 import os
+import json
 import queue
 import threading
 
@@ -13,34 +14,89 @@ class SpeechService:
 
     def __init__(self):
 
+        credentials = None
+
         # ============================================
-        # CREDENCIALES GOOGLE
+        # RENDER
         # ============================================
 
-        credentials_path = os.getenv(
-            "GOOGLE_APPLICATION_CREDENTIALS"
+        credentials_json = os.getenv(
+            "GOOGLE_APPLICATION_CREDENTIALS_JSON"
         )
 
-        if not credentials_path:
-            raise RuntimeError(
-                "No se encontró GOOGLE_APPLICATION_CREDENTIALS"
+        if credentials_json:
+
+            print(
+                "Usando credenciales Google desde "
+                "GOOGLE_APPLICATION_CREDENTIALS_JSON"
             )
 
-        if not os.path.exists(credentials_path):
-            raise RuntimeError(
-                f"No existe el archivo de credenciales: {credentials_path}"
+            try:
+
+                credentials_info = json.loads(
+                    credentials_json
+                )
+
+                credentials = (
+                    service_account.Credentials
+                    .from_service_account_info(
+                        credentials_info
+                    )
+                )
+
+            except json.JSONDecodeError as e:
+
+                raise RuntimeError(
+                    "GOOGLE_APPLICATION_CREDENTIALS_JSON "
+                    "no contiene un JSON válido"
+                ) from e
+
+            except Exception as e:
+
+                raise RuntimeError(
+                    f"Error cargando credenciales Google: {e}"
+                ) from e
+
+        # ============================================
+        # LOCAL
+        # ============================================
+
+        else:
+
+            credentials_path = os.getenv(
+                "GOOGLE_APPLICATION_CREDENTIALS"
             )
 
-        print(
-            f"Usando credenciales Google: {credentials_path}"
-        )
+            if not credentials_path:
 
-        credentials = (
-            service_account.Credentials
-            .from_service_account_file(
-                credentials_path
+                raise RuntimeError(
+                    "No se encontró ninguna credencial de Google. "
+                    "Configure GOOGLE_APPLICATION_CREDENTIALS "
+                    "o GOOGLE_APPLICATION_CREDENTIALS_JSON."
+                )
+
+            if not os.path.exists(credentials_path):
+
+                raise RuntimeError(
+                    "No existe el archivo de credenciales: "
+                    f"{credentials_path}"
+                )
+
+            print(
+                "Usando credenciales Google desde archivo: "
+                f"{credentials_path}"
             )
-        )
+
+            credentials = (
+                service_account.Credentials
+                .from_service_account_file(
+                    credentials_path
+                )
+            )
+
+        # ============================================
+        # GOOGLE SPEECH
+        # ============================================
 
         self.client = speech.SpeechClient(
             credentials=credentials
@@ -55,7 +111,7 @@ class SpeechService:
         self.text_queue = queue.Queue()
 
         # ============================================
-        # CONFIGURACIÓN GOOGLE SPEECH
+        # CONFIGURACIÓN
         # ============================================
 
         self.config = speech.RecognitionConfig(
@@ -88,7 +144,7 @@ class SpeechService:
         self.running = True
 
     # ============================================
-    # RECIBIR AUDIO
+    # AUDIO
     # ============================================
 
     def add_audio(self, audio):
@@ -98,7 +154,7 @@ class SpeechService:
             self.audio_queue.put(audio)
 
     # ============================================
-    # GENERADOR DE AUDIO
+    # GENERADOR
     # ============================================
 
     def audio_generator(self):
@@ -115,15 +171,13 @@ class SpeechService:
             )
 
     # ============================================
-    # INICIAR GOOGLE SPEECH
+    # INICIAR
     # ============================================
 
     def start(self):
 
         thread = threading.Thread(
-
             target=self.recognize,
-
             daemon=True
         )
 
@@ -188,7 +242,7 @@ class SpeechService:
             )
 
     # ============================================
-    # OBTENER RESULTADO
+    # OBTENER TEXTO
     # ============================================
 
     def get_text(self):
