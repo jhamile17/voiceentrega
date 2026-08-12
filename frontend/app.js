@@ -32,6 +32,35 @@ let conectado = false;
 
 
 // ============================================
+// URL DEL BACKEND
+// ============================================
+
+function obtenerWebSocketUrl() {
+
+    // ----------------------------------------
+    // LOCAL
+    // ----------------------------------------
+
+    if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+    ) {
+
+        return "ws://localhost:8000/ws/audio";
+
+    }
+
+
+    // ----------------------------------------
+    // RENDER / PRODUCCIÓN
+    // ----------------------------------------
+
+    return "wss://voiceentrega-1.onrender.com/ws/audio";
+
+}
+
+
+// ============================================
 // INICIAR / DETENER
 // ============================================
 
@@ -58,28 +87,36 @@ async function iniciar() {
 
     try {
 
-        console.log("Iniciando transcripción...");
+        console.log(
+            "Iniciando transcripción..."
+        );
+
 
         boton.disabled = true;
+
 
         tituloEstado.textContent =
             "Conectando...";
 
+
         subtituloEstado.textContent =
             "Preparando el micrófono...";
 
+
         estado.textContent =
             "Conectando";
+
 
         estadoPunto.style.background =
             "#f59e0b";
 
 
-        // --------------------------------------------
+        // ----------------------------------------
         // LIMPIAR TRANSCRIPCIÓN ANTERIOR
-        // --------------------------------------------
+        // ----------------------------------------
 
         finalText = "";
+
 
         texto.innerHTML = `
             <div class="empty-state">
@@ -94,21 +131,37 @@ async function iniciar() {
         `;
 
 
-        // --------------------------------------------
-        // CREAR WEBSOCKET
-        // --------------------------------------------
+        // ----------------------------------------
+        // OBTENER URL WEBSOCKET
+        // ----------------------------------------
 
-        socket = new WebSocket(
-            "ws://localhost:8000/ws/audio"
+        const websocketUrl =
+            obtenerWebSocketUrl();
+
+
+        console.log(
+            "Conectando WebSocket:",
+            websocketUrl
         );
+
+
+        // ----------------------------------------
+        // CREAR WEBSOCKET
+        // ----------------------------------------
+
+        socket =
+            new WebSocket(
+                websocketUrl
+            );
+
 
         socket.binaryType =
             "arraybuffer";
 
 
-        // ============================================
+        // ========================================
         // WEBSOCKET CONECTADO
-        // ============================================
+        // ========================================
 
         socket.onopen = async () => {
 
@@ -125,12 +178,14 @@ async function iniciar() {
                 estado.textContent =
                     "Conectado";
 
+
                 estadoPunto.style.background =
                     "#22c55e";
 
 
                 tituloEstado.textContent =
                     "Micrófono activo";
+
 
                 subtituloEstado.textContent =
                     "Habla normalmente";
@@ -143,14 +198,18 @@ async function iniciar() {
                 boton.textContent =
                     "⏹ Detener transcripción";
 
-                boton.classList.add("stop");
+
+                boton.classList.add(
+                    "stop"
+                );
+
 
                 boton.disabled = false;
 
 
-                // --------------------------------------------
+                // ----------------------------------------
                 // SOLICITAR MICRÓFONO
-                // --------------------------------------------
+                // ----------------------------------------
 
                 stream =
                     await navigator.mediaDevices.getUserMedia({
@@ -175,9 +234,9 @@ async function iniciar() {
                 );
 
 
-                // --------------------------------------------
+                // ----------------------------------------
                 // AUDIO CONTEXT
-                // --------------------------------------------
+                // ----------------------------------------
 
                 audioContext =
                     new AudioContext({
@@ -187,8 +246,9 @@ async function iniciar() {
                     });
 
 
-                // Algunos navegadores pueden
-                // iniciar el AudioContext suspendido.
+                // ----------------------------------------
+                // REANUDAR AUDIO CONTEXT
+                // ----------------------------------------
 
                 if (
                     audioContext.state ===
@@ -200,18 +260,35 @@ async function iniciar() {
                 }
 
 
-                // --------------------------------------------
+                console.log(
+                    "AudioContext:",
+                    audioContext.state
+                );
+
+
+                console.log(
+                    "Sample rate:",
+                    audioContext.sampleRate
+                );
+
+
+                // ----------------------------------------
                 // CARGAR AUDIO WORKLET
-                // --------------------------------------------
+                // ----------------------------------------
 
                 await audioContext.audioWorklet.addModule(
                     "audioProcessor.js"
                 );
 
 
-                // --------------------------------------------
+                console.log(
+                    "AudioProcessor cargado"
+                );
+
+
+                // ----------------------------------------
                 // SOURCE
-                // --------------------------------------------
+                // ----------------------------------------
 
                 source =
                     audioContext.createMediaStreamSource(
@@ -219,9 +296,9 @@ async function iniciar() {
                     );
 
 
-                // --------------------------------------------
+                // ----------------------------------------
                 // PROCESSOR
-                // --------------------------------------------
+                // ----------------------------------------
 
                 processor =
                     new AudioWorkletNode(
@@ -230,9 +307,9 @@ async function iniciar() {
                     );
 
 
-                // --------------------------------------------
-                // AUDIO DEL WORKLET
-                // --------------------------------------------
+                // ----------------------------------------
+                // RECIBIR AUDIO DEL WORKLET
+                // ----------------------------------------
 
                 processor.port.onmessage =
                     (event) => {
@@ -252,9 +329,9 @@ async function iniciar() {
                     };
 
 
-                // --------------------------------------------
-                // CONECTAR AUDIO
-                // --------------------------------------------
+                // ----------------------------------------
+                // CONECTAR SOURCE → PROCESSOR
+                // ----------------------------------------
 
                 source.connect(
                     processor
@@ -262,17 +339,18 @@ async function iniciar() {
 
 
                 /*
-                    NO conectamos processor
+                    No conectamos processor
                     con audioContext.destination.
 
-                    De esta forma el micrófono
-                    no se reproduce por los parlantes.
+                    De esta manera el audio
+                    del micrófono no se reproduce
+                    por los parlantes.
                 */
 
 
-                // --------------------------------------------
+                // ----------------------------------------
                 // INICIAR TIMER
-                // --------------------------------------------
+                // ----------------------------------------
 
                 startTimer();
 
@@ -302,9 +380,9 @@ async function iniciar() {
         };
 
 
-        // ============================================
+        // ========================================
         // RESULTADOS DE GOOGLE SPEECH-TO-TEXT
-        // ============================================
+        // ========================================
 
         socket.onmessage =
             (event) => {
@@ -326,13 +404,14 @@ async function iniciar() {
                     const textoReconocido =
                         resultado.text;
 
+
                     const esFinal =
                         resultado.final;
 
 
-                    // --------------------------------------------
+                    // ----------------------------------------
                     // VALIDAR TEXTO
-                    // --------------------------------------------
+                    // ----------------------------------------
 
                     if (
                         !textoReconocido ||
@@ -344,9 +423,9 @@ async function iniciar() {
                     }
 
 
-                    // --------------------------------------------
+                    // ----------------------------------------
                     // IGNORAR "STOP"
-                    // --------------------------------------------
+                    // ----------------------------------------
 
                     if (
                         textoReconocido
@@ -364,9 +443,9 @@ async function iniciar() {
                     }
 
 
-                    // ============================================
+                    // ----------------------------------------
                     // RESULTADO FINAL
-                    // ============================================
+                    // ----------------------------------------
 
                     if (esFinal) {
 
@@ -379,9 +458,9 @@ async function iniciar() {
                     }
 
 
-                    // ============================================
+                    // ----------------------------------------
                     // RESULTADO INTERMEDIO
-                    // ============================================
+                    // ----------------------------------------
 
                     else {
 
@@ -404,31 +483,40 @@ async function iniciar() {
             };
 
 
-        // ============================================
+        // ========================================
         // WEBSOCKET CERRADO
-        // ============================================
+        // ========================================
 
         socket.onclose =
-            () => {
+            (event) => {
 
                 console.log(
-                    "WebSocket cerrado"
+                    "WebSocket cerrado:",
+                    event.code,
+                    event.reason
                 );
 
 
                 /*
-                    No llamamos socket.close()
-                    nuevamente desde detener().
+                    Si el cierre ocurrió porque
+                    nosotros presionamos detener,
+                    no necesitamos hacer nada más.
                 */
 
-                limpiarRecursos(false);
+                if (conectado) {
+
+                    limpiarRecursos(
+                        false
+                    );
+
+                }
 
             };
 
 
-        // ============================================
+        // ========================================
         // ERROR WEBSOCKET
-        // ============================================
+        // ========================================
 
         socket.onerror =
             (error) => {
@@ -444,7 +532,7 @@ async function iniciar() {
                 );
 
 
-                detener();
+                conectado = false;
 
             };
 
@@ -479,7 +567,9 @@ function actualizarTextoFinal() {
 
 
     const finalElement =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
 
     finalElement.className =
@@ -512,12 +602,14 @@ function actualizarTextoInterim(
     texto.innerHTML = "";
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // TEXTO FINAL
-    // --------------------------------------------
+    // ----------------------------------------
 
     const finalElement =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
 
     finalElement.className =
@@ -533,12 +625,14 @@ function actualizarTextoInterim(
     );
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // TEXTO INTERMEDIO
-    // --------------------------------------------
+    // ----------------------------------------
 
     const interimElement =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
 
     interimElement.className =
@@ -554,9 +648,9 @@ function actualizarTextoInterim(
     );
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // SCROLL AUTOMÁTICO
-    // --------------------------------------------
+    // ----------------------------------------
 
     texto.scrollTop =
         texto.scrollHeight;
@@ -578,8 +672,9 @@ function detener() {
     conectado = false;
 
 
-    limpiarRecursos(true);
-
+    limpiarRecursos(
+        true
+    );
 
 }
 
@@ -592,16 +687,16 @@ function limpiarRecursos(
     cerrarSocket = true
 ) {
 
-    // --------------------------------------------
+    // ----------------------------------------
     // TIMER
-    // --------------------------------------------
+    // ----------------------------------------
 
     detenerTimer();
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // AUDIO PROCESSOR
-    // --------------------------------------------
+    // ----------------------------------------
 
     if (processor) {
 
@@ -619,14 +714,15 @@ function limpiarRecursos(
 
         }
 
+
         processor = null;
 
     }
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // AUDIO SOURCE
-    // --------------------------------------------
+    // ----------------------------------------
 
     if (source) {
 
@@ -644,14 +740,15 @@ function limpiarRecursos(
 
         }
 
+
         source = null;
 
     }
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // AUDIO CONTEXT
-    // --------------------------------------------
+    // ----------------------------------------
 
     if (audioContext) {
 
@@ -669,14 +766,15 @@ function limpiarRecursos(
 
         }
 
+
         audioContext = null;
 
     }
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // MICRÓFONO
-    // --------------------------------------------
+    // ----------------------------------------
 
     if (stream) {
 
@@ -686,14 +784,15 @@ function limpiarRecursos(
                 track => track.stop()
             );
 
+
         stream = null;
 
     }
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // WEBSOCKET
-    // --------------------------------------------
+    // ----------------------------------------
 
     if (
         cerrarSocket &&
@@ -704,9 +803,10 @@ function limpiarRecursos(
 
             if (
                 socket.readyState ===
-                WebSocket.OPEN ||
+                    WebSocket.OPEN ||
+
                 socket.readyState ===
-                WebSocket.CONNECTING
+                    WebSocket.CONNECTING
             ) {
 
                 socket.close();
@@ -729,9 +829,9 @@ function limpiarRecursos(
     socket = null;
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // ESTADO
-    // --------------------------------------------
+    // ----------------------------------------
 
     conectado = false;
 
@@ -756,9 +856,9 @@ function limpiarRecursos(
         "Presiona el botón para comenzar a hablar";
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // BOTÓN
-    // --------------------------------------------
+    // ----------------------------------------
 
     boton.disabled = false;
 
@@ -772,9 +872,9 @@ function limpiarRecursos(
     );
 
 
-    // --------------------------------------------
+    // ----------------------------------------
     // LIMPIAR TRANSCRIPCIÓN
-    // --------------------------------------------
+    // ----------------------------------------
 
     finalText = "";
 
@@ -885,7 +985,10 @@ function startTimer() {
             timerElement.textContent =
 
                 String(minutes)
-                    .padStart(2, "0")
+                    .padStart(
+                        2,
+                        "0"
+                    )
 
                 +
 
