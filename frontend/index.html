@@ -2,28 +2,117 @@
 <html lang="es">
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<meta charset="UTF-8">
+    <title>VozCloud | Transcripción en tiempo real</title>
 
-<title>VozCloud</title>
-
-<link rel="stylesheet" href="style.css">
-
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<h1>🎤 VozCloud</h1>
+    <main class="app">
 
-<button id="btnIniciar" onclick="iniciar()">
-Iniciar reconocimiento
-</button>
+        <header class="header">
 
-<div id="texto">
-Esperando audio...
-</div>
+            <div>
+                <h1>VozCloud</h1>
+                <p>Transcripción de voz en tiempo real</p>
+            </div>
 
-<script src="app.js"></script>
+            <div class="connection">
+                <span id="estadoPunto" class="status-dot"></span>
+                <span id="estado">Desconectado</span>
+            </div>
+
+        </header>
+
+
+        <section class="control-card">
+
+            <div id="microfono" class="microphone">
+                🎙️
+            </div>
+
+            <h2 id="tituloEstado">
+                Listo para comenzar
+            </h2>
+
+            <p id="subtituloEstado">
+                Presiona el botón para comenzar a hablar
+            </p>
+
+            <div id="timer" class="timer">
+                00:00
+            </div>
+
+            <button
+                id="btnIniciar"
+                class="btn-start"
+                onclick="toggleTranscripcion()">
+
+                🎙️ Iniciar transcripción
+
+            </button>
+
+        </section>
+
+
+        <section class="transcription-card">
+
+            <div class="section-header">
+
+                <div>
+                    <h2>Transcripción</h2>
+                    <p>Texto reconocido por Google Cloud Speech-to-Text</p>
+                </div>
+
+                <button
+                    id="btnLimpiar"
+                    class="btn-clear"
+                    onclick="limpiarTexto()">
+
+                    Limpiar
+
+                </button>
+
+            </div>
+
+
+            <div id="texto" class="transcription">
+
+                <div class="empty-state">
+
+                    <span>🎤</span>
+
+                    <p>
+                        Tu transcripción aparecerá aquí
+                    </p>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <footer>
+
+            <span id="estadoAudio">
+                ● Micrófono inactivo
+            </span>
+
+            <span>
+                VozCloud
+            </span>
+
+        </footer>
+
+    </main>
+
+
+    <script src="app.js"></script>
 
 </body>
 

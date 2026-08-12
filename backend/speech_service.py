@@ -1,9 +1,11 @@
 import os
+import json
 import queue
 import threading
 
 from google.cloud import speech
 from google.oauth2 import service_account
+
 
 RATE = 16000
 
@@ -12,15 +14,20 @@ class SpeechService:
 
     def __init__(self):
 
-        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        credentials_path = os.getenv(
+            "GOOGLE_APPLICATION_CREDENTIALS"
+        )
 
         if not credentials_path:
             raise RuntimeError(
                 "No se encontró GOOGLE_APPLICATION_CREDENTIALS"
             )
 
-        credentials = service_account.Credentials.from_service_account_file(
-            credentials_path
+        credentials = (
+            service_account.Credentials
+            .from_service_account_file(
+                credentials_path
+            )
         )
 
         self.client = speech.SpeechClient(
@@ -31,17 +38,22 @@ class SpeechService:
         self.text_queue = queue.Queue()
 
         self.config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            encoding=(
+                speech.RecognitionConfig
+                .AudioEncoding.LINEAR16
+            ),
             sample_rate_hertz=RATE,
             language_code="es-PE",
             enable_automatic_punctuation=True,
             max_alternatives=1
         )
 
-        self.streaming_config = speech.StreamingRecognitionConfig(
-            config=self.config,
-            interim_results=True,
-            single_utterance=False
+        self.streaming_config = (
+            speech.StreamingRecognitionConfig(
+                config=self.config,
+                interim_results=True,
+                single_utterance=False
+            )
         )
 
         self.running = True
@@ -70,28 +82,42 @@ class SpeechService:
 
     def recognize(self):
 
-        responses = self.client.streaming_recognize(
-            self.streaming_config,
-            self.audio_generator()
-        )
+        try:
 
-        for response in responses:
+            responses = self.client.streaming_recognize(
+                self.streaming_config,
+                self.audio_generator()
+            )
 
-            for result in response.results:
+            for response in responses:
 
-                texto = result.alternatives[0].transcript
+                for result in response.results:
 
-                if texto:
+                    texto = (
+                        result.alternatives[0].transcript
+                    )
 
-                    self.text_queue.put({
-                        "text": texto,
-                        "final": result.is_final
-                    })
+                    if texto:
+
+                        self.text_queue.put({
+                            "text": texto,
+                            "final": result.is_final
+                        })
+
+        except Exception as e:
+
+            print(
+                f"Error en Google Speech-to-Text: {e}"
+            )
 
     def get_text(self):
 
         try:
-            return self.text_queue.get(timeout=0.1)
+
+            return self.text_queue.get(
+                timeout=0.1
+            )
 
         except queue.Empty:
+
             return None
