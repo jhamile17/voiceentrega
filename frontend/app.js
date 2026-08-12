@@ -55,7 +55,7 @@ function obtenerWebSocketUrl() {
     // RENDER / PRODUCCIÓN
     // ----------------------------------------
 
-    return "wss://voiceentrega-1.onrender.com/ws/audio";
+    return "wss://voiceentrega-1.onrender.com";
 
 }
 
