@@ -45,15 +45,23 @@ const TARGET_SAMPLE_RATE = 16000;
 
 function obtenerWebSocketUrl() {
 
+    // ========================================
     // LOCAL
+    // ========================================
+
     if (
         window.location.hostname === "localhost" ||
         window.location.hostname === "127.0.0.1"
     ) {
+
         return "ws://localhost:8000/ws/audio";
     }
 
-    // RENDER
+
+    // ========================================
+    // PRODUCCIÓN - RENDER
+    // ========================================
+
     return "wss://voiceentrega.onrender.com/ws/audio";
 }
 
@@ -65,8 +73,11 @@ function obtenerWebSocketUrl() {
 function toggleTranscripcion() {
 
     if (conectado) {
+
         detener();
+
     } else {
+
         iniciar();
     }
 }
@@ -84,16 +95,24 @@ async function iniciar() {
         console.log("Iniciando transcripción...");
         console.log("=================================");
 
+
         boton.disabled = true;
 
-        tituloEstado.textContent = "Conectando...";
+
+        tituloEstado.textContent =
+            "Conectando...";
+
 
         subtituloEstado.textContent =
             "Preparando el micrófono...";
 
-        estado.textContent = "Conectando";
 
-        estadoPunto.style.background = "#f59e0b";
+        estado.textContent =
+            "Conectando";
+
+
+        estadoPunto.style.background =
+            "#f59e0b";
 
 
         // ========================================
@@ -117,6 +136,7 @@ async function iniciar() {
         const websocketUrl =
             obtenerWebSocketUrl();
 
+
         console.log(
             "WebSocket:",
             websocketUrl
@@ -127,48 +147,64 @@ async function iniciar() {
         // CREAR WEBSOCKET
         // ========================================
 
-        socket = new WebSocket(
-            websocketUrl
-        );
+        socket =
+            new WebSocket(
+                websocketUrl
+            );
 
-        socket.binaryType = "arraybuffer";
+
+        socket.binaryType =
+            "arraybuffer";
 
 
         // ========================================
-        // WEBSOCKET ABIERTO
+        // WEBSOCKET CONECTADO
         // ========================================
 
         socket.onopen = async () => {
 
-            console.log(
-                "WebSocket conectado correctamente"
-            );
-
-            conectado = true;
-
-            estado.textContent = "Conectado";
-
-            estadoPunto.style.background =
-                "#22c55e";
-
-            tituloEstado.textContent =
-                "Micrófono activo";
-
-            subtituloEstado.textContent =
-                "Habla normalmente";
-
-            estadoAudio.textContent =
-                "● Escuchando";
-
-            boton.textContent =
-                "⏹ Detener transcripción";
-
-            boton.classList.add("stop");
-
-            boton.disabled = false;
-
-
             try {
+
+                console.log(
+                    "WebSocket conectado correctamente"
+                );
+
+
+                conectado = true;
+
+
+                estado.textContent =
+                    "Conectado";
+
+
+                estadoPunto.style.background =
+                    "#22c55e";
+
+
+                tituloEstado.textContent =
+                    "Micrófono activo";
+
+
+                subtituloEstado.textContent =
+                    "Habla normalmente";
+
+
+                estadoAudio.textContent =
+                    "● Escuchando";
+
+
+                boton.textContent =
+                    "⏹ Detener transcripción";
+
+
+                boton.classList.add(
+                    "stop"
+                );
+
+
+                boton.disabled =
+                    false;
+
 
                 // ====================================
                 // SOLICITAR MICRÓFONO
@@ -191,8 +227,9 @@ async function iniciar() {
 
                     });
 
+
                 console.log(
-                    "Micrófono obtenido"
+                    "Micrófono obtenido correctamente"
                 );
 
 
@@ -201,30 +238,27 @@ async function iniciar() {
                 // ====================================
 
                 /*
-                    NO forzamos sampleRate aquí.
+                    No forzamos 16000 Hz aquí.
 
-                    En celulares normalmente será:
+                    En celulares normalmente el navegador
+                    trabaja a 48000 Hz.
 
-                    48000 Hz
-
-                    Google necesita:
-
-                    16000 Hz
-
-                    Por eso hacemos la conversión
-                    dentro del AudioWorklet.
+                    El AudioWorklet será el encargado
+                    de convertir 48000 Hz -> 16000 Hz.
                 */
 
                 audioContext =
                     new AudioContext();
+
 
                 console.log(
                     "AudioContext:",
                     audioContext.state
                 );
 
+
                 console.log(
-                    "Sample rate original:",
+                    "Sample rate del dispositivo:",
                     audioContext.sampleRate
                 );
 
@@ -239,8 +273,13 @@ async function iniciar() {
                 ) {
 
                     await audioContext.resume();
-
                 }
+
+
+                console.log(
+                    "AudioContext después de resume:",
+                    audioContext.state
+                );
 
 
                 // ====================================
@@ -251,8 +290,9 @@ async function iniciar() {
                     "audioProcessor.js"
                 );
 
+
                 console.log(
-                    "AudioProcessor cargado"
+                    "AudioProcessor cargado correctamente"
                 );
 
 
@@ -278,7 +318,7 @@ async function iniciar() {
 
 
                 // ====================================
-                // RECIBIR PCM DEL WORKLET
+                // RECIBIR AUDIO DEL WORKLET
                 // ====================================
 
                 processor.port.onmessage =
@@ -293,9 +333,7 @@ async function iniciar() {
                             socket.send(
                                 event.data
                             );
-
                         }
-
                     };
 
 
@@ -311,10 +349,11 @@ async function iniciar() {
                 /*
                     IMPORTANTE:
 
-                    No conectamos processor con
+                    NO conectamos processor con
                     audioContext.destination.
 
-                    Así no escuchamos nuestra propia voz.
+                    De esta forma el micrófono
+                    no se reproduce por los parlantes.
                 */
 
 
@@ -355,14 +394,14 @@ async function iniciar() {
                     error
                 );
 
+
                 mostrarError(
                     "No se pudo acceder al micrófono"
                 );
 
+
                 detener();
-
             }
-
         };
 
 
@@ -396,7 +435,7 @@ async function iniciar() {
 
 
                     // ====================================
-                    // VALIDAR
+                    // VALIDAR TEXTO
                     // ====================================
 
                     if (
@@ -405,7 +444,6 @@ async function iniciar() {
                     ) {
 
                         return;
-
                     }
 
 
@@ -416,7 +454,8 @@ async function iniciar() {
                     if (
                         textoReconocido
                             .trim()
-                            .toLowerCase() === "stop"
+                            .toLowerCase() ===
+                        "stop"
                     ) {
 
                         console.log(
@@ -424,7 +463,6 @@ async function iniciar() {
                         );
 
                         return;
-
                     }
 
 
@@ -435,10 +473,11 @@ async function iniciar() {
                     if (esFinal) {
 
                         finalText +=
-                            textoReconocido.trim() + " ";
+                            textoReconocido.trim() +
+                            " ";
+
 
                         actualizarTextoFinal();
-
                     }
 
 
@@ -451,7 +490,6 @@ async function iniciar() {
                         actualizarTextoInterim(
                             textoReconocido
                         );
-
                     }
 
                 }
@@ -461,9 +499,7 @@ async function iniciar() {
                         "Error procesando mensaje:",
                         error
                     );
-
                 }
-
             };
 
 
@@ -473,6 +509,10 @@ async function iniciar() {
 
         socket.onclose =
             (event) => {
+
+                console.log(
+                    "================================="
+                );
 
                 console.log(
                     "WebSocket cerrado"
@@ -488,15 +528,19 @@ async function iniciar() {
                     event.reason
                 );
 
+                console.log(
+                    "================================="
+                );
+
 
                 if (conectado) {
+
+                    conectado = false;
 
                     limpiarRecursos(
                         false
                     );
-
                 }
-
             };
 
 
@@ -512,12 +556,13 @@ async function iniciar() {
                     error
                 );
 
+
                 mostrarError(
                     "No se pudo conectar con el servidor"
                 );
 
-                conectado = false;
 
+                conectado = false;
             };
 
     }
@@ -528,14 +573,14 @@ async function iniciar() {
             error
         );
 
+
         mostrarError(
             "Ocurrió un error al iniciar la transcripción"
         );
 
+
         detener();
-
     }
-
 }
 
 
@@ -547,18 +592,25 @@ function actualizarTextoFinal() {
 
     texto.innerHTML = "";
 
+
     const finalElement =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
+
 
     finalElement.className =
         "final-text";
 
+
     finalElement.textContent =
         finalText;
+
 
     texto.appendChild(
         finalElement
     );
+
 
     texto.scrollTop =
         texto.scrollHeight;
@@ -581,13 +633,18 @@ function actualizarTextoInterim(
     // ========================================
 
     const finalElement =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
+
 
     finalElement.className =
         "final-text";
 
+
     finalElement.textContent =
         finalText;
+
 
     texto.appendChild(
         finalElement
@@ -599,13 +656,18 @@ function actualizarTextoInterim(
     // ========================================
 
     const interimElement =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
+
 
     interimElement.className =
         "interim-text";
 
+
     interimElement.textContent =
         textoInterim;
+
 
     texto.appendChild(
         interimElement
@@ -631,9 +693,13 @@ function detener() {
         "Deteniendo transcripción..."
     );
 
+
     conectado = false;
 
-    limpiarRecursos(true);
+
+    limpiarRecursos(
+        true
+    );
 }
 
 
@@ -669,8 +735,8 @@ function limpiarRecursos(
                 "Error desconectando processor:",
                 error
             );
-
         }
+
 
         processor = null;
     }
@@ -693,8 +759,8 @@ function limpiarRecursos(
                 "Error desconectando source:",
                 error
             );
-
         }
+
 
         source = null;
     }
@@ -717,8 +783,8 @@ function limpiarRecursos(
                 "Error cerrando AudioContext:",
                 error
             );
-
         }
+
 
         audioContext = null;
     }
@@ -735,6 +801,7 @@ function limpiarRecursos(
             .forEach(
                 track => track.stop()
             );
+
 
         stream = null;
     }
@@ -760,7 +827,6 @@ function limpiarRecursos(
             ) {
 
                 socket.close();
-
             }
 
         }
@@ -770,10 +836,9 @@ function limpiarRecursos(
                 "Error cerrando WebSocket:",
                 error
             );
-
         }
-
     }
+
 
     socket = null;
 
@@ -784,17 +849,22 @@ function limpiarRecursos(
 
     conectado = false;
 
+
     estado.textContent =
         "Desconectado";
+
 
     estadoPunto.style.background =
         "#9ca3af";
 
+
     estadoAudio.textContent =
         "● Micrófono inactivo";
 
+
     tituloEstado.textContent =
         "Listo para comenzar";
+
 
     subtituloEstado.textContent =
         "Presiona el botón para comenzar a hablar";
@@ -804,10 +874,13 @@ function limpiarRecursos(
     // BOTÓN
     // ========================================
 
-    boton.disabled = false;
+    boton.disabled =
+        false;
+
 
     boton.textContent =
         "🎙️ Iniciar transcripción";
+
 
     boton.classList.remove(
         "stop"
@@ -819,6 +892,7 @@ function limpiarRecursos(
     // ========================================
 
     finalText = "";
+
 
     texto.innerHTML = `
         <div class="empty-state">
@@ -841,6 +915,7 @@ function limpiarRecursos(
 function limpiarTexto() {
 
     finalText = "";
+
 
     texto.innerHTML = `
         <div class="empty-state">
@@ -886,11 +961,14 @@ function startTimer() {
 
     detenerTimer();
 
+
     startTime =
         Date.now();
 
+
     timerElement.textContent =
         "00:00";
+
 
     timerInterval =
         setInterval(() => {
@@ -899,18 +977,22 @@ function startTimer() {
                 Date.now() -
                 startTime;
 
+
             const seconds =
                 Math.floor(
                     elapsed / 1000
                 );
+
 
             const minutes =
                 Math.floor(
                     seconds / 60
                 );
 
+
             const remainingSeconds =
                 seconds % 60;
+
 
             timerElement.textContent =
 
@@ -949,10 +1031,13 @@ function detenerTimer() {
             timerInterval
         );
 
+
         timerInterval = null;
     }
 
+
     startTime = null;
+
 
     if (timerElement) {
 
