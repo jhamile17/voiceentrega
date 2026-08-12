@@ -1,9 +1,9 @@
+import os
 import queue
 import threading
 
 from google.cloud import speech
 from google.oauth2 import service_account
-
 
 RATE = 16000
 
@@ -12,8 +12,15 @@ class SpeechService:
 
     def __init__(self):
 
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
+        if not credentials_path:
+            raise RuntimeError(
+                "No se encontró GOOGLE_APPLICATION_CREDENTIALS"
+            )
+
         credentials = service_account.Credentials.from_service_account_file(
-            r"E:\VOZCLOUD\vozcloud-502700-3e5d87745ce5.json"
+            credentials_path
         )
 
         self.client = speech.SpeechClient(
