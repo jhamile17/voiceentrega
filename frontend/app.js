@@ -22,6 +22,7 @@ let socket = null;
 let audioContext = null;
 let processor = null;
 let source = null;
+let silentGain = null;
 let stream = null;
 
 let finalText = "";
@@ -30,6 +31,7 @@ let timerInterval = null;
 let startTime = null;
 
 let conectado = false;
+let iniciando = false;
 
 
 // ============================================
@@ -45,24 +47,54 @@ const TARGET_SAMPLE_RATE = 16000;
 
 function obtenerWebSocketUrl() {
 
+    const hostname = window.location.hostname;
+
+    console.log("Hostname actual:", hostname);
+
+
     // ========================================
-    // LOCAL
+    // LOCALHOST
     // ========================================
 
     if (
-        window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1"
+        hostname === "localhost" ||
+        hostname === "127.0.0.1"
     ) {
 
-        return "ws://localhost:8000/ws/audio";
+        const url =
+            "ws://localhost:8000/ws/audio";
+
+        console.log("WebSocket LOCAL:", url);
+
+        return url;
     }
 
 
     // ========================================
-    // PRODUCCIÓN - RENDER
+    // RED LOCAL
     // ========================================
 
-    return "wss://voiceentrega.onrender.com/ws/audio";
+    if (hostname.startsWith("192.168.")) {
+
+        const url =
+            `ws://${hostname}:8000/ws/audio`;
+
+        console.log("WebSocket RED LOCAL:", url);
+
+        return url;
+    }
+
+
+    // ========================================
+    // PRODUCCIÓN
+    // ========================================
+
+    const url =
+        "wss://voiceentrega.onrender.com/ws/audio";
+
+    console.log("WebSocket PRODUCCIÓN:", url);
+
+    return url;
 }
 
 
@@ -71,6 +103,10 @@ function obtenerWebSocketUrl() {
 // ============================================
 
 function toggleTranscripcion() {
+
+    if (iniciando) {
+        return;
+    }
 
     if (conectado) {
 
@@ -89,34 +125,74 @@ function toggleTranscripcion() {
 
 async function iniciar() {
 
+    if (iniciando || conectado) {
+        return;
+    }
+
+    iniciando = true;
+
     try {
 
         console.log("=================================");
-        console.log("Iniciando transcripción...");
+        console.log("INICIANDO TRANSCRIPCIÓN");
         console.log("=================================");
 
 
+        // ========================================
+        // VALIDAR MICRÓFONO
+        // ========================================
+
+        if (
+            !navigator.mediaDevices ||
+            !navigator.mediaDevices.getUserMedia
+        ) {
+
+            throw new Error(
+                "El navegador no permite acceder al micrófono."
+            );
+        }
+
+
+        // ========================================
+        // VALIDAR CONTEXTO SEGURO
+        // ========================================
+
+        console.log(
+            "Contexto seguro:",
+            window.isSecureContext
+        );
+
+
+        if (!window.isSecureContext) {
+
+            throw new Error(
+                "El micrófono requiere HTTPS en el celular. " +
+                "En PC localhost sí funciona, pero 192.168.x.x necesita HTTPS."
+            );
+        }
+
+
+        // ========================================
+        // ESTADO UI
+        // ========================================
+
         boton.disabled = true;
 
-
         tituloEstado.textContent =
-            "Conectando...";
-
+            "Preparando...";
 
         subtituloEstado.textContent =
-            "Preparando el micrófono...";
-
+            "Solicitando acceso al micrófono";
 
         estado.textContent =
             "Conectando";
-
 
         estadoPunto.style.background =
             "#f59e0b";
 
 
         // ========================================
-        // LIMPIAR TEXTO ANTERIOR
+        // LIMPIAR TEXTO
         // ========================================
 
         finalText = "";
@@ -124,13 +200,98 @@ async function iniciar() {
         texto.innerHTML = `
             <div class="empty-state">
                 <span>🎤</span>
-                <p>Escuchando...</p>
+                <p>Preparando micrófono...</p>
             </div>
         `;
 
 
         // ========================================
-        // URL WEBSOCKET
+        // SOLICITAR MICRÓFONO
+        // ========================================
+
+        console.log(
+            "Solicitando permiso del micrófono..."
+        );
+
+        stream =
+            await navigator.mediaDevices.getUserMedia({
+
+                audio: {
+
+                    channelCount: { ideal: 1 },
+
+                    echoCancellation: { ideal: true },
+
+                    noiseSuppression: { ideal: true },
+
+                    autoGainControl: { ideal: true }
+
+                }
+
+            });
+
+
+        console.log(
+            "Micrófono obtenido correctamente"
+        );
+
+
+        // ========================================
+        // CREAR AUDIO CONTEXT
+        // ========================================
+
+        audioContext =
+            new (
+                window.AudioContext ||
+                window.webkitAudioContext
+            )();
+
+
+        console.log(
+            "AudioContext creado"
+        );
+
+        console.log(
+            "Sample rate:",
+            audioContext.sampleRate
+        );
+
+
+        // ========================================
+        // REANUDAR AUDIO
+        // ========================================
+
+        if (
+            audioContext.state ===
+            "suspended"
+        ) {
+
+            await audioContext.resume();
+        }
+
+
+        console.log(
+            "AudioContext estado:",
+            audioContext.state
+        );
+
+
+        // ========================================
+        // CARGAR AUDIO WORKLET
+        // ========================================
+
+        await audioContext.audioWorklet.addModule(
+            "audioProcessor.js"
+        );
+
+
+        console.log(
+            "AudioProcessor cargado"
+        );
+
+
+        // ========================================
+        // CONECTAR WEBSOCKET
         // ========================================
 
         const websocketUrl =
@@ -138,14 +299,10 @@ async function iniciar() {
 
 
         console.log(
-            "WebSocket:",
+            "Conectando WebSocket:",
             websocketUrl
         );
 
-
-        // ========================================
-        // CREAR WEBSOCKET
-        // ========================================
 
         socket =
             new WebSocket(
@@ -158,250 +315,167 @@ async function iniciar() {
 
 
         // ========================================
-        // WEBSOCKET CONECTADO
+        // WEBSOCKET ABIERTO
         // ========================================
 
-        socket.onopen = async () => {
+        socket.onopen = () => {
 
-            try {
+            console.log(
+                "WebSocket conectado correctamente"
+            );
 
-                console.log(
-                    "WebSocket conectado correctamente"
+
+            conectado = true;
+            iniciando = false;
+
+
+            estado.textContent =
+                "Conectado";
+
+            estadoPunto.style.background =
+                "#22c55e";
+
+
+            tituloEstado.textContent =
+                "Micrófono activo";
+
+            subtituloEstado.textContent =
+                "Habla normalmente";
+
+
+            estadoAudio.textContent =
+                "● Escuchando";
+
+
+            boton.textContent =
+                "⏹ Detener transcripción";
+
+
+            boton.classList.add(
+                "stop"
+            );
+
+
+            boton.disabled =
+                false;
+
+
+            // ====================================
+            // SOURCE
+            // ====================================
+
+            source =
+                audioContext.createMediaStreamSource(
+                    stream
                 );
 
+            // Mantiene activo el nodo de captura sin reproducir el micrófono.
+            silentGain =
+                audioContext.createGain();
 
-                conectado = true;
-
-
-                estado.textContent =
-                    "Conectado";
-
-
-                estadoPunto.style.background =
-                    "#22c55e";
+            silentGain.gain.value = 0;
 
 
-                tituloEstado.textContent =
-                    "Micrófono activo";
+            // ====================================
+            // PROCESSOR
+            // ====================================
 
+            processor =
+                new AudioWorkletNode(
+                    audioContext,
+                    "audio-processor",
+                    {
 
-                subtituloEstado.textContent =
-                    "Habla normalmente";
+                        processorOptions: {
 
+                            inputSampleRate:
+                                audioContext.sampleRate,
 
-                estadoAudio.textContent =
-                    "● Escuchando";
+                            outputSampleRate:
+                                TARGET_SAMPLE_RATE,
 
-
-                boton.textContent =
-                    "⏹ Detener transcripción";
-
-
-                boton.classList.add(
-                    "stop"
-                );
-
-
-                boton.disabled =
-                    false;
-
-
-                // ====================================
-                // SOLICITAR MICRÓFONO
-                // ====================================
-
-                stream =
-                    await navigator.mediaDevices.getUserMedia({
-
-                        audio: {
-
-                            channelCount: 1,
-
-                            echoCancellation: true,
-
-                            noiseSuppression: true,
-
-                            autoGainControl: true
+                            packetSamples:
+                                1600
 
                         }
 
-                    });
-
-
-                console.log(
-                    "Micrófono obtenido correctamente"
+                    }
                 );
 
 
-                // ====================================
-                // AUDIO CONTEXT
-                // ====================================
+            // ====================================
+            // RECIBIR AUDIO
+            // ====================================
 
-                /*
-                    No forzamos 16000 Hz aquí.
+            processor.port.onmessage =
+                (event) => {
 
-                    En celulares normalmente el navegador
-                    trabaja a 48000 Hz.
+                    if (
+                        socket &&
+                        socket.readyState ===
+                        WebSocket.OPEN
+                    ) {
 
-                    El AudioWorklet será el encargado
-                    de convertir 48000 Hz -> 16000 Hz.
-                */
-
-                audioContext =
-                    new AudioContext();
-
-
-                console.log(
-                    "AudioContext:",
-                    audioContext.state
-                );
+                        socket.send(
+                            event.data
+                        );
+                    }
+                };
 
 
-                console.log(
-                    "Sample rate del dispositivo:",
-                    audioContext.sampleRate
-                );
+            // ====================================
+            // SOURCE → PROCESSOR
+            // ====================================
+
+            source.connect(
+                processor
+            );
+
+            processor.connect(
+                silentGain
+            );
+
+            silentGain.connect(
+                audioContext.destination
+            );
 
 
-                // ====================================
-                // REANUDAR AUDIO
-                // ====================================
+            // ====================================
+            // TIMER
+            // ====================================
 
-                if (
-                    audioContext.state ===
-                    "suspended"
-                ) {
-
-                    await audioContext.resume();
-                }
+            startTimer();
 
 
-                console.log(
-                    "AudioContext después de resume:",
-                    audioContext.state
-                );
+            texto.innerHTML = `
+                <div class="empty-state">
+                    <span>🎤</span>
+                    <p>Escuchando...</p>
+                </div>
+            `;
 
 
-                // ====================================
-                // CARGAR AUDIO WORKLET
-                // ====================================
+            console.log(
+                "================================="
+            );
 
-                await audioContext.audioWorklet.addModule(
-                    "audioProcessor.js"
-                );
+            console.log(
+                "TRANSCRIPCIÓN INICIADA"
+            );
 
+            console.log(
+                "Sample rate entrada:",
+                audioContext.sampleRate
+            );
 
-                console.log(
-                    "AudioProcessor cargado correctamente"
-                );
+            console.log(
+                "Sample rate destino:",
+                TARGET_SAMPLE_RATE
+            );
 
-
-                // ====================================
-                // SOURCE
-                // ====================================
-
-                source =
-                    audioContext.createMediaStreamSource(
-                        stream
-                    );
-
-
-                // ====================================
-                // PROCESSOR
-                // ====================================
-
-                processor =
-                    new AudioWorkletNode(
-                        audioContext,
-                        "audio-processor"
-                    );
-
-
-                // ====================================
-                // RECIBIR AUDIO DEL WORKLET
-                // ====================================
-
-                processor.port.onmessage =
-                    (event) => {
-
-                        if (
-                            socket &&
-                            socket.readyState ===
-                            WebSocket.OPEN
-                        ) {
-
-                            socket.send(
-                                event.data
-                            );
-                        }
-                    };
-
-
-                // ====================================
-                // SOURCE → PROCESSOR
-                // ====================================
-
-                source.connect(
-                    processor
-                );
-
-
-                /*
-                    IMPORTANTE:
-
-                    NO conectamos processor con
-                    audioContext.destination.
-
-                    De esta forma el micrófono
-                    no se reproduce por los parlantes.
-                */
-
-
-                // ====================================
-                // TIMER
-                // ====================================
-
-                startTimer();
-
-
-                console.log(
-                    "================================="
-                );
-
-                console.log(
-                    "Transcripción iniciada"
-                );
-
-                console.log(
-                    "Sample rate entrada:",
-                    audioContext.sampleRate
-                );
-
-                console.log(
-                    "Sample rate destino:",
-                    TARGET_SAMPLE_RATE
-                );
-
-                console.log(
-                    "================================="
-                );
-
-            }
-            catch (error) {
-
-                console.error(
-                    "Error iniciando micrófono:",
-                    error
-                );
-
-
-                mostrarError(
-                    "No se pudo acceder al micrófono"
-                );
-
-
-                detener();
-            }
+            console.log(
+                "================================="
+            );
         };
 
 
@@ -429,14 +503,9 @@ async function iniciar() {
                     const textoReconocido =
                         resultado.text;
 
-
                     const esFinal =
                         resultado.final;
 
-
-                    // ====================================
-                    // VALIDAR TEXTO
-                    // ====================================
 
                     if (
                         !textoReconocido ||
@@ -447,10 +516,6 @@ async function iniciar() {
                     }
 
 
-                    // ====================================
-                    // IGNORAR STOP
-                    // ====================================
-
                     if (
                         textoReconocido
                             .trim()
@@ -458,17 +523,9 @@ async function iniciar() {
                         "stop"
                     ) {
 
-                        console.log(
-                            "Mensaje STOP ignorado"
-                        );
-
                         return;
                     }
 
-
-                    // ====================================
-                    // RESULTADO FINAL
-                    // ====================================
 
                     if (esFinal) {
 
@@ -476,16 +533,9 @@ async function iniciar() {
                             textoReconocido.trim() +
                             " ";
 
-
                         actualizarTextoFinal();
-                    }
 
-
-                    // ====================================
-                    // RESULTADO INTERMEDIO
-                    // ====================================
-
-                    else {
+                    } else {
 
                         actualizarTextoInterim(
                             textoReconocido
@@ -515,7 +565,7 @@ async function iniciar() {
                 );
 
                 console.log(
-                    "WebSocket cerrado"
+                    "WEBSOCKET CERRADO"
                 );
 
                 console.log(
@@ -558,28 +608,47 @@ async function iniciar() {
 
 
                 mostrarError(
-                    "No se pudo conectar con el servidor"
+                    "Error de conexión con el servidor"
                 );
 
 
                 conectado = false;
+                iniciando = false;
             };
 
     }
     catch (error) {
 
         console.error(
-            "Error al iniciar:",
+            "================================="
+        );
+
+        console.error(
+            "ERROR INICIANDO:"
+        );
+
+        console.error(
             error
         );
 
-
-        mostrarError(
-            "Ocurrió un error al iniciar la transcripción"
+        console.error(
+            "================================="
         );
 
 
-        detener();
+        iniciando = false;
+        conectado = false;
+
+
+        mostrarError(
+            error.message ||
+            "No se pudo iniciar la transcripción"
+        );
+
+
+        limpiarRecursos(
+            true
+        );
     }
 }
 
@@ -592,25 +661,20 @@ function actualizarTextoFinal() {
 
     texto.innerHTML = "";
 
-
     const finalElement =
         document.createElement(
             "div"
         );
 
-
     finalElement.className =
         "final-text";
-
 
     finalElement.textContent =
         finalText;
 
-
     texto.appendChild(
         finalElement
     );
-
 
     texto.scrollTop =
         texto.scrollHeight;
@@ -628,55 +692,37 @@ function actualizarTextoInterim(
     texto.innerHTML = "";
 
 
-    // ========================================
-    // TEXTO FINAL
-    // ========================================
-
     const finalElement =
         document.createElement(
             "div"
         );
 
-
     finalElement.className =
         "final-text";
 
-
     finalElement.textContent =
         finalText;
-
 
     texto.appendChild(
         finalElement
     );
 
 
-    // ========================================
-    // TEXTO INTERMEDIO
-    // ========================================
-
     const interimElement =
         document.createElement(
             "div"
         );
 
-
     interimElement.className =
         "interim-text";
 
-
     interimElement.textContent =
         textoInterim;
-
 
     texto.appendChild(
         interimElement
     );
 
-
-    // ========================================
-    // SCROLL
-    // ========================================
 
     texto.scrollTop =
         texto.scrollHeight;
@@ -684,7 +730,7 @@ function actualizarTextoInterim(
 
 
 // ============================================
-// DETENER TRANSCRIPCIÓN
+// DETENER
 // ============================================
 
 function detener() {
@@ -695,6 +741,7 @@ function detener() {
 
 
     conectado = false;
+    iniciando = false;
 
 
     limpiarRecursos(
@@ -726,6 +773,9 @@ function limpiarRecursos(
 
         try {
 
+            processor.port.onmessage =
+                null;
+
             processor.disconnect();
 
         }
@@ -736,7 +786,6 @@ function limpiarRecursos(
                 error
             );
         }
-
 
         processor = null;
     }
@@ -761,7 +810,6 @@ function limpiarRecursos(
             );
         }
 
-
         source = null;
     }
 
@@ -785,7 +833,6 @@ function limpiarRecursos(
             );
         }
 
-
         audioContext = null;
     }
 
@@ -801,7 +848,6 @@ function limpiarRecursos(
             .forEach(
                 track => track.stop()
             );
-
 
         stream = null;
     }
@@ -820,10 +866,10 @@ function limpiarRecursos(
 
             if (
                 socket.readyState ===
-                    WebSocket.OPEN ||
+                WebSocket.OPEN ||
 
                 socket.readyState ===
-                    WebSocket.CONNECTING
+                WebSocket.CONNECTING
             ) {
 
                 socket.close();
@@ -848,23 +894,20 @@ function limpiarRecursos(
     // ========================================
 
     conectado = false;
+    iniciando = false;
 
 
     estado.textContent =
         "Desconectado";
 
-
     estadoPunto.style.background =
         "#9ca3af";
-
 
     estadoAudio.textContent =
         "● Micrófono inactivo";
 
-
     tituloEstado.textContent =
         "Listo para comenzar";
-
 
     subtituloEstado.textContent =
         "Presiona el botón para comenzar a hablar";
@@ -877,34 +920,12 @@ function limpiarRecursos(
     boton.disabled =
         false;
 
-
     boton.textContent =
         "🎙️ Iniciar transcripción";
-
 
     boton.classList.remove(
         "stop"
     );
-
-
-    // ========================================
-    // TEXTO
-    // ========================================
-
-    finalText = "";
-
-
-    texto.innerHTML = `
-        <div class="empty-state">
-
-            <span>🎤</span>
-
-            <p>
-                Tu transcripción aparecerá aquí
-            </p>
-
-        </div>
-    `;
 }
 
 
@@ -916,16 +937,10 @@ function limpiarTexto() {
 
     finalText = "";
 
-
     texto.innerHTML = `
         <div class="empty-state">
-
             <span>🎤</span>
-
-            <p>
-                Tu transcripción aparecerá aquí
-            </p>
-
+            <p>Tu transcripción aparecerá aquí</p>
         </div>
     `;
 }
@@ -961,10 +976,8 @@ function startTimer() {
 
     detenerTimer();
 
-
     startTime =
         Date.now();
-
 
     timerElement.textContent =
         "00:00";
@@ -977,18 +990,15 @@ function startTimer() {
                 Date.now() -
                 startTime;
 
-
             const seconds =
                 Math.floor(
                     elapsed / 1000
                 );
 
-
             const minutes =
                 Math.floor(
                     seconds / 60
                 );
-
 
             const remainingSeconds =
                 seconds % 60;
@@ -1031,10 +1041,8 @@ function detenerTimer() {
             timerInterval
         );
 
-
         timerInterval = null;
     }
-
 
     startTime = null;
 

@@ -1,204 +1,76 @@
 class AudioProcessor extends AudioWorkletProcessor {
-
-    constructor() {
+    constructor(options) {
         super();
 
-        // Frecuencia real del dispositivo
-        this.inputSampleRate = sampleRate;
+        const processorOptions = options.processorOptions || {};
 
-        // Frecuencia que espera Google Speech
-        this.targetSampleRate = 16000;
+        this.inputSampleRate =
+            processorOptions.inputSampleRate || sampleRate;
+        this.targetSampleRate =
+            processorOptions.outputSampleRate || 16000;
+        this.packetSamples =
+            processorOptions.packetSamples || 1600;
+        this.ratio =
+            this.inputSampleRate / this.targetSampleRate;
 
-        // Relación de conversión
-        this.resampleRatio =
-            this.inputSampleRate /
-            this.targetSampleRate;
-
-        console.log(
-            "AudioProcessor iniciado:",
-            this.inputSampleRate,
-            "Hz ->",
-            this.targetSampleRate,
-            "Hz"
-        );
+        // La posición se conserva entre bloques. Esto evita distorsión en
+        // celulares que capturan a 44.1 kHz (no es múltiplo de 16 kHz).
+        this.samples = [];
+        this.position = 0;
+        this.packet = new Int16Array(this.packetSamples);
+        this.packetLength = 0;
     }
 
-
-    process(inputs, outputs, parameters) {
-
-        const input = inputs[0];
-
-        if (!input || input.length === 0) {
-            return true;
-        }
-
-
-        const channel = input[0];
+    process(inputs) {
+        const channel = inputs[0] && inputs[0][0];
 
         if (!channel) {
             return true;
         }
 
-
-        // ============================================
-        // SI YA ESTAMOS EN 16000 Hz
-        // ============================================
-
-        if (
-            this.inputSampleRate ===
-            this.targetSampleRate
-        ) {
-
-            this.convertirYEnviar(channel);
-
-            return true;
+        for (let index = 0; index < channel.length; index += 1) {
+            this.samples.push(channel[index]);
         }
 
+        while (this.position + 1 < this.samples.length) {
+            const index = Math.floor(this.position);
+            const fraction = this.position - index;
+            const sample =
+                this.samples[index] * (1 - fraction) +
+                this.samples[index + 1] * fraction;
+            const clamped = Math.max(-1, Math.min(1, sample));
 
-        // ============================================
-        // CONVERTIR A 16000 Hz
-        // ============================================
+            this.packet[this.packetLength] =
+                clamped < 0 ? clamped * 32768 : clamped * 32767;
+            this.packetLength += 1;
 
-        this.remuestrear(channel);
+            // Google recibe bloques consistentes de 100 ms en vez de cientos
+            // de mensajes de 2-3 ms cada segundo.
+            if (this.packetLength === this.packetSamples) {
+                this.port.postMessage(
+                    this.packet.buffer,
+                    [this.packet.buffer]
+                );
 
+                this.packet = new Int16Array(this.packetSamples);
+                this.packetLength = 0;
+            }
+
+            this.position += this.ratio;
+        }
+
+        const consumed = Math.min(
+            Math.floor(this.position),
+            this.samples.length
+        );
+
+        if (consumed > 0) {
+            this.samples = this.samples.slice(consumed);
+            this.position -= consumed;
+        }
 
         return true;
     }
-
-
-    // ============================================
-    // REMUESTREO
-    // ============================================
-
-    remuestrear(input) {
-
-        const ratio =
-            this.resampleRatio;
-
-
-        const outputLength =
-            Math.floor(
-                input.length / ratio
-            );
-
-
-        const pcm =
-            new Int16Array(
-                outputLength
-            );
-
-
-        for (
-            let i = 0;
-            i < outputLength;
-            i++
-        ) {
-
-            const position =
-                i * ratio;
-
-
-            const index =
-                Math.floor(
-                    position
-                );
-
-
-            const nextIndex =
-                Math.min(
-                    index + 1,
-                    input.length - 1
-                );
-
-
-            const fraction =
-                position - index;
-
-
-            // Interpolación lineal
-            const sample =
-                input[index] *
-                    (1 - fraction) +
-
-                input[nextIndex] *
-                    fraction;
-
-
-            // Limitar Float32 entre -1 y 1
-            const normalized =
-                Math.max(
-                    -1,
-                    Math.min(
-                        1,
-                        sample
-                    )
-                );
-
-
-            // Float32 -> PCM Int16
-            pcm[i] =
-                normalized < 0
-                    ? normalized * 32768
-                    : normalized * 32767;
-        }
-
-
-        // Enviar PCM al app.js
-        this.port.postMessage(
-            pcm.buffer,
-            [pcm.buffer]
-        );
-    }
-
-
-    // ============================================
-    // CONVERTIR DIRECTAMENTE A PCM
-    // ============================================
-
-    convertirYEnviar(input) {
-
-        const pcm =
-            new Int16Array(
-                input.length
-            );
-
-
-        for (
-            let i = 0;
-            i < input.length;
-            i++
-        ) {
-
-            let sample =
-                input[i];
-
-
-            sample =
-                Math.max(
-                    -1,
-                    Math.min(
-                        1,
-                        sample
-                    )
-                );
-
-
-            pcm[i] =
-                sample < 0
-                    ? sample * 32768
-                    : sample * 32767;
-        }
-
-
-        this.port.postMessage(
-            pcm.buffer,
-            [pcm.buffer]
-        );
-    }
 }
 
-
-registerProcessor(
-    "audio-processor",
-    AudioProcessor
-);
+registerProcessor(audio-processor, AudioProcessor);
