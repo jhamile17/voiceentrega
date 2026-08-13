@@ -281,7 +281,7 @@ async function iniciar() {
         // ========================================
 
         await audioContext.audioWorklet.addModule(
-            "audioProcessor.js"
+            "audioProcessor.js?v=20260813-2"
         );
 
 
